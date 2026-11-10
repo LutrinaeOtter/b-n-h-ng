@@ -1,0 +1,38 @@
+/** Run: node test-core.js */
+const fs = require('fs');
+const vm = require('vm');
+const assert = require('assert/strict');
+const ctx = { window: {} };
+vm.runInNewContext(fs.readFileSync(__dirname + '/assets/core.js', 'utf8'), ctx);
+const { LinkedInventory, normalizeProduct, csvProducts, csvFromProducts, makeMockProduct } = ctx.window.LumiCore;
+(async () => {
+  const inv = new LinkedInventory();
+  const now = performance.now();
+  for (let i = 1; i <= 100000; i++) inv.add(makeMockProduct(i, 'TEST'));
+  assert.equal(inv.size, 100000);
+  assert.equal(inv.byId.size, 100000);
+  assert.equal(inv.get('TEST-000001').id, 'TEST-000001');
+  inv.add({ id: 'FIRST', name:'First',price:10,stock:5,rating:5 }, 'head');
+  inv.add({ id: 'LAST', name:'Last',price:20,stock:10,rating:4 }, 'tail');
+  assert.equal(inv.head.product.id, 'FIRST');
+  assert.equal(inv.tail.product.id, 'LAST');
+  assert.equal(inv.remove('FIRST').id, 'FIRST');
+  assert.equal(inv.remove('TEST-056789').id, 'TEST-056789');
+  assert.equal(inv.remove('LAST').id, 'LAST');
+  assert.equal(inv.remove('NO-SUCH-ID'), null);
+  inv.update('TEST-000003',{name:'Updated product',rating:4.7,stock:0});
+  assert.equal(inv.get('TEST-000003').name,'Updated product');
+  assert.equal(inv.get('TEST-000003').stock,0);
+  const checked = inv.verify();
+  assert.equal(checked.count, 99999);
+  const csv = csvFromProducts([{id:'C1', name:'Laptop, 15" screen',price:123000,stock:3,rating:4.9}]);
+  const parsed = Array.from(csvProducts(csv));
+  assert.equal(parsed[0].name, 'Laptop, 15" screen');
+  assert.equal(parsed[0].price, 123000);
+  assert.throws(()=>normalizeProduct({id:'id',name:'x',price:'',stock:2,rating:2}));
+  assert.throws(()=>normalizeProduct({id:'id',name:'x',price:1,stock:2.5,rating:2}));
+  assert.throws(()=>normalizeProduct({id:'id',name:'x',price:1,stock:2,rating:9}));
+  inv.dispose();
+  assert.equal(inv.size, 0); assert.equal(inv.head, null); assert.equal(inv.tail,null); assert.equal(inv.byId.size,0);
+  console.log(`PASS: 100.000 products, insert head/tail, delete ID, update, CSV, verify, dispose; ${((performance.now()-now)/1000).toFixed(2)}s`);
+})().catch(e=>{console.error(e);process.exit(1)});
